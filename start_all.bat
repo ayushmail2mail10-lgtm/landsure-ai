@@ -1,4 +1,4 @@
-﻿@echo off
+﻿gi@echo off
 title LandSure AI - Launcher
 echo =========================================================================
 echo   LandSure AI - Intelligent Land Record Digitization & Validation System
