@@ -1,6 +1,5 @@
 ﻿import re
 import os
-
 from typing import Dict, Any, Tuple
 
 
@@ -9,7 +8,6 @@ def is_712_land_record(raw_text: str) -> bool:
     Checks whether the OCR text appears to be a Maharashtra 7/12 extract.
     Multiple indicators are required to reduce false positives.
     """
-
     text = raw_text.lower()
 
     indicators = [
@@ -42,7 +40,6 @@ def run_ocr_and_extract(image_path: str) -> Tuple[str, Dict[str, Any], float]:
     """
     Extracts text using OCR and parses key land record fields.
     """
-
     raw_text = ""
 
     # Try reading text from an associated SVG if exists
@@ -65,7 +62,6 @@ def run_ocr_and_extract(image_path: str) -> Tuple[str, Dict[str, Any], float]:
         try:
             import pytesseract
             raw_text = pytesseract.image_to_string(image_path)
-
         except Exception:
             raw_text = ""
 
@@ -107,7 +103,7 @@ def parse_land_record_text(
     # Try Regex extractions from raw_text
 
     survey_match = re.search(
-        r"(?\:Survey|Gut|Khasra|सर्व्हे|गट|खसरा)\s\*(?\:No|Number|नं|क्र)?[:.\s-]\*([0-9]+(?:/[0-9]+[a-zA-Z]?)?)",
+        r"(?:Survey|Gut|Khasra|सर्व्हे|गट|खसरा)\s*(?:No|Number|नं|क्र)?[:.\s-]*([0-9]+(?:/[0-9]+[a-zA-Z]?)?)",
         raw_text,
         re.IGNORECASE
     )
@@ -117,7 +113,7 @@ def parse_land_record_text(
         fields["confidence_per_field"]["survey_number"] = 0.96
 
     owner_match = re.search(
-        r"(?\:Owner|Khatedar|खातेदाराचे नाव|नाव)[:.\s-]\*([A-Za-z\s\u0900-\u097F]+?)(?:**\n**|Father|वडिलांचे|गाव|$)",
+        r"(?:Owner|Khatedar|खातेदाराचे नाव|नाव)[:.\s-]*([A-Za-z\s\u0900-\u097F]+?)(?:\n|Father|वडिलांचे|गाव|$)",
         raw_text,
         re.IGNORECASE
     )
@@ -130,7 +126,7 @@ def parse_land_record_text(
             fields["confidence_per_field"]["owner_name"] = 0.94
 
     father_match = re.search(
-        r"(?\:Father|वडिलांचे नाव)[:.\s-]\*([A-Za-z\s\u0900-\u097F]+?)(?:**\n**|गाव|$)",
+        r"(?:Father|वडिलांचे नाव)[:.\s-]*([A-Za-z\s\u0900-\u097F]+?)(?:\n|गाव|$)",
         raw_text,
         re.IGNORECASE
     )
@@ -143,7 +139,7 @@ def parse_land_record_text(
             fields["confidence_per_field"]["fathers_name"] = 0.91
 
     area_match = re.search(
-        r"(?\:Area|Total Area|एकूण क्षेत्र)[:.\s-]\*([0-9]+(?:**\\.**[0-9]+)?)\s\*(?\:Ha|Hectare|Acre|आर|गुंठा)?",
+        r"(?:Area|Total Area|एकूण क्षेत्र)[:.\s-]*([0-9]+(?:\.[0-9]+)?)\s*(?:Ha|Hectare|Acre|आर|गुंठा)?",
         raw_text,
         re.IGNORECASE
     )
@@ -153,7 +149,7 @@ def parse_land_record_text(
         fields["confidence_per_field"]["land_area"] = 0.95
 
     village_match = re.search(
-        r"(?\:Village|गाव|ग्राम)[:.\s-]\*([A-Za-z\u0900-\u097F]+)",
+        r"(?:Village|गाव|ग्राम)[:.\s-]*([A-Za-z\u0900-\u097F]+)",
         raw_text,
         re.IGNORECASE
     )
@@ -163,7 +159,7 @@ def parse_land_record_text(
         fields["confidence_per_field"]["village"] = 0.92
 
     taluka_match = re.search(
-        r"(?\:Taluka|तालुका|तहसील)[:.\s-]\*([A-Za-z\u0900-\u097F]+)",
+        r"(?:Taluka|तालुका|तहसील)[:.\s-]*([A-Za-z\u0900-\u097F]+)",
         raw_text,
         re.IGNORECASE
     )
@@ -173,7 +169,7 @@ def parse_land_record_text(
         fields["confidence_per_field"]["taluka"] = 0.90
 
     district_match = re.search(
-        r"(?\:District|जिल्हा)[:.\s-]\*([A-Za-z\u0900-\u097F]+)",
+        r"(?:District|जिल्हा)[:.\s-]*([A-Za-z\u0900-\u097F]+)",
         raw_text,
         re.IGNORECASE
     )
@@ -183,7 +179,7 @@ def parse_land_record_text(
         fields["confidence_per_field"]["district"] = 0.93
 
     mutation_match = re.search(
-        r"(?\:Mutation|फेरफार)[:.\s-]\*([0-9]+)",
+        r"(?:Mutation|फेरफार)[:.\s-]*([0-9]+)",
         raw_text,
         re.IGNORECASE
     )
@@ -193,7 +189,7 @@ def parse_land_record_text(
         fields["confidence_per_field"]["mutation_number"] = 0.92
 
     date_match = re.search(
-        r"(?\:Date|दिनांक)[:.\s-]\*([0-9]{2}/[0-9]{2}/[0-9]{4})",
+        r"(?:Date|दिनांक)[:.\s-]*([0-9]{2}/[0-9]{2}/[0-9]{4})",
         raw_text,
         re.IGNORECASE
     )
@@ -205,7 +201,6 @@ def parse_land_record_text(
     # Demo Fallback / Pre-packaged Samples handling
 
     if "genuine_pune" in filename or "pune" in filename:
-
         fields.update({
             "owner_name": "Rameshwar Shivram Patil",
             "fathers_name": "Shivram Tukaram Patil",
@@ -221,7 +216,6 @@ def parse_land_record_text(
         })
 
     elif "spelling_nashik" in filename or "nashik" in filename:
-
         fields.update({
             "owner_name": "Ramesh S. Patil",
             "fathers_name": "Shivram Patil",
@@ -237,7 +231,6 @@ def parse_land_record_text(
         })
 
     elif "fraud_owner" in filename:
-
         fields.update({
             "owner_name": "Vikramaditya K. Singhania",
             "fathers_name": "Kailash Singhania",
@@ -253,7 +246,6 @@ def parse_land_record_text(
         })
 
     elif "area_mismatch" in filename:
-
         fields.update({
             "owner_name": "Sunita Devendra Deshmukh",
             "fathers_name": "Devendra Deshmukh",
@@ -271,7 +263,6 @@ def parse_land_record_text(
     # Fill default confidences
 
     for k in fields:
-
         if (
             k != "confidence_per_field"
             and k not in fields["confidence_per_field"]
