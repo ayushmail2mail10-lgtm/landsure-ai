@@ -106,7 +106,7 @@ export const DocumentUploader = ({ onUploadSuccess }) => {
     setCurrentStep(`Loading sample record: ${sampleFilename}...`);
 
     try {
-      const response = await fetch(`http://127.0.0.1:8000/samples/${sampleFilename}`);
+      const response = await fetch(`https://landsure-ai.onrender.com/samples/${sampleFilename}`);
       if (!response.ok) throw new Error('Sample not found on server');
       const blob = await response.blob();
       const file = new File([blob], sampleFilename, { type: 'image/png' });

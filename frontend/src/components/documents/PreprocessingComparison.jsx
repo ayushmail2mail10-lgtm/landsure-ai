@@ -13,7 +13,7 @@ export const PreprocessingComparison = ({ originalUrl, processedUrl }) => {
     if (!path) return '';
     if (path.startsWith('http')) return path;
     const filename = path.replace(/\\/g, '/').split('/').pop();
-    return `http://127.0.0.1:8000/${folder}/${filename}`;
+    return `https://landsure-ai.onrender.com/${folder}/${filename}`;
   };
 
   const origSrc = getCleanUrl(originalUrl, 'uploads');

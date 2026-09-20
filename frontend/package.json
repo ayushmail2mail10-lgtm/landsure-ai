@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@rolldown/binding-win32-x64-msvc": "^1.2.7",
-    "@rollup/wasm-node": "^4.63.1",
+    "@rollup/wasm-node": "^4.63.4",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^4.3.4",
