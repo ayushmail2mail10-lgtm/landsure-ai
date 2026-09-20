@@ -4,7 +4,7 @@ import hashlib
 import shutil
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
 
 from app.core.config import UPLOADS_DIR, PROCESSED_DIR
@@ -15,13 +15,11 @@ from app.models.document import Document
 from app.models.validation import ValidationResult
 from app.schemas.document import DocumentOut, DocumentDetail, IntegrityCheckOut
 from app.services.preprocessing import preprocess_document_image
-from app.services.ocr_engine import run_ocr_and_extract, is_712_land_record
+from app.services.ocr_engine import run_ocr_and_extract
 from app.services.validation_engine import run_validation_pipeline
 from app.services.audit_service import record_audit_log
 
-
 router = APIRouter(prefix="/documents", tags=["Documents"])
-
 
 ALLOWED_MIME_TYPES = [
     "image/jpeg",
@@ -33,35 +31,12 @@ ALLOWED_MIME_TYPES = [
 MAX_FILE_SIZE = 15 * 1024 * 1024  # 15 MB
 
 
-def is_demo_sample(filename: str) -> bool:
-    """
-    Allows only the four official LandSure AI demo samples
-    to bypass OCR-based 7/12 detection.
-    """
-
-    name = filename.lower()
-
-    demo_samples = [
-        "genuine_pune",
-        "spelling_nashik",
-        "fraud_owner",
-        "area_mismatch"
-    ]
-
-    return any(sample in name for sample in demo_samples)
-
-
 @router.post("/upload", response_model=DocumentDetail)
 async def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
-    # ---------------------------------------------------------
-    # 1. FILE FORMAT CHECK
-    # ---------------------------------------------------------
-
     if (
         file.content_type not in ALLOWED_MIME_TYPES
         and not file.filename.lower().endswith(
@@ -73,11 +48,6 @@ async def upload_document(
             detail="Unsupported file format. Please upload PDF, JPG, or PNG."
         )
 
-
-    # ---------------------------------------------------------
-    # 2. FILE SIZE CHECK
-    # ---------------------------------------------------------
-
     contents = await file.read()
 
     if len(contents) > MAX_FILE_SIZE:
@@ -86,67 +56,33 @@ async def upload_document(
             detail="File size exceeds limit of 15 MB."
         )
 
-
-    # ---------------------------------------------------------
-    # 3. GENERATE SHA-256 HASH
-    # ---------------------------------------------------------
-
     file_hash = hashlib.sha256(contents).hexdigest()
 
-
-    # ---------------------------------------------------------
-    # 4. SAVE ORIGINAL FILE
-    # ---------------------------------------------------------
-
     doc_count = db.query(Document).count()
-
     doc_num = f"DOC-2026-{1000 + doc_count + 1}"
 
     safe_filename = f"{doc_num}_{file.filename}"
-
-    file_path = os.path.join(
-        UPLOADS_DIR,
-        safe_filename
-    )
+    file_path = os.path.join(UPLOADS_DIR, safe_filename)
 
     with open(file_path, "wb") as f:
         f.write(contents)
 
-
-    # ---------------------------------------------------------
-    # 5. PREPROCESSING
-    # ---------------------------------------------------------
-
     proc_filename = f"proc_{safe_filename}"
-
-    proc_path = os.path.join(
-        PROCESSED_DIR,
-        proc_filename
-    )
+    proc_path = os.path.join(PROCESSED_DIR, proc_filename)
 
     try:
         preprocess_document_image(
             file_path,
             proc_path
         )
-
     except Exception:
         proc_path = file_path
 
-
-    # ---------------------------------------------------------
-    # 6. OCR EXTRACTION
-    # ---------------------------------------------------------
-
     try:
-
         raw_text, structured, conf = run_ocr_and_extract(
             proc_path
         )
-
     except Exception as e:
-
-        # Delete uploaded files if OCR fails
         try:
             if os.path.exists(file_path):
                 os.remove(file_path)
@@ -165,50 +101,6 @@ async def upload_document(
             detail=f"Unable to process the uploaded document: {str(e)}"
         )
 
-
-    # ---------------------------------------------------------
-    # 7. 7/12 LAND RECORD VALIDATION
-    # ---------------------------------------------------------
-    #
-    # Demo Hub samples are allowed.
-    # Normal uploads must contain multiple indicators
-    # of a Maharashtra 7/12 land record.
-    #
-
-    filename = file.filename or ""
-
-    if not is_demo_sample(filename):
-
-        if not is_712_land_record(raw_text):
-
-            # Delete invalid uploaded document
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-
-                if (
-                    proc_path != file_path
-                    and os.path.exists(proc_path)
-                ):
-                    os.remove(proc_path)
-
-            except Exception:
-                pass
-
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "This document does not appear to be a "
-                    "Maharashtra 7/12 land record. "
-                    "Please upload a valid 7/12 extract."
-                )
-            )
-
-
-    # ---------------------------------------------------------
-    # 8. DOCUMENT DB RECORD
-    # ---------------------------------------------------------
-
     doc = Document(
         document_number=doc_num,
         file_name=file.filename,
@@ -226,13 +118,7 @@ async def upload_document(
     )
 
     db.add(doc)
-
     db.flush()
-
-
-    # ---------------------------------------------------------
-    # 9. VALIDATION ENGINE
-    # ---------------------------------------------------------
 
     val_result = run_validation_pipeline(
         db,
@@ -240,11 +126,6 @@ async def upload_document(
         structured,
         conf
     )
-
-
-    # ---------------------------------------------------------
-    # 10. AUDIT TRAIL
-    # ---------------------------------------------------------
 
     record_audit_log(
         db=db,
@@ -263,26 +144,14 @@ async def upload_document(
         )
     )
 
-
-    # ---------------------------------------------------------
-    # 11. COMMIT DATABASE
-    # ---------------------------------------------------------
-
     db.commit()
-
     db.refresh(doc)
-
-
-    # ---------------------------------------------------------
-    # 12. PARSE STRUCTURED DATA FOR RESPONSE
-    # ---------------------------------------------------------
 
     parsed_structured = (
         json.loads(doc.structured_data)
         if doc.structured_data
         else {}
     )
-
 
     return {
         "id": doc.id,
@@ -306,17 +175,12 @@ async def upload_document(
     }
 
 
-# =============================================================
-# LIST DOCUMENTS
-# =============================================================
-
 @router.get("", response_model=List[DocumentDetail])
 def list_documents(
     status_filter: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
     query = db.query(Document)
 
     if current_user.role == "citizen":
@@ -373,10 +237,6 @@ def list_documents(
     return results
 
 
-# =============================================================
-# GET DOCUMENT BY ID
-# =============================================================
-
 @router.get(
     "/{id}",
     response_model=DocumentDetail
@@ -386,7 +246,6 @@ def get_document_by_id(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-
     doc = db.query(
         Document
     ).filter(
@@ -433,10 +292,6 @@ def get_document_by_id(
     }
 
 
-# =============================================================
-# VERIFY DOCUMENT INTEGRITY
-# =============================================================
-
 @router.get(
     "/{id}/verify-integrity",
     response_model=IntegrityCheckOut
@@ -445,7 +300,6 @@ def verify_document_integrity(
     id: int,
     db: Session = Depends(get_db)
 ):
-
     doc = db.query(
         Document
     ).filter(
@@ -459,7 +313,6 @@ def verify_document_integrity(
         )
 
     if not os.path.exists(doc.file_path):
-
         return {
             "document_id": doc.id,
             "document_number": doc.document_number,
@@ -471,25 +324,18 @@ def verify_document_integrity(
             )
         }
 
-
     with open(doc.file_path, "rb") as f:
-
         current_hash = hashlib.sha256(
             f.read()
         ).hexdigest()
-
 
     is_valid = (
         current_hash == doc.sha256_hash
     )
 
-
     if not is_valid and not doc.is_tampered:
-
         doc.is_tampered = True
-
         db.commit()
-
 
     return {
         "document_id": doc.id,
