@@ -1,10 +1,9 @@
 import os
 import json
 import hashlib
-import shutil
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.config import UPLOADS_DIR, PROCESSED_DIR
@@ -37,9 +36,10 @@ async def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # Validate file type
     if (
         file.content_type not in ALLOWED_MIME_TYPES
-        and not file.filename.lower().endswith(
+        and not (file.filename or "").lower().endswith(
             (".png", ".jpg", ".jpeg", ".pdf")
         )
     ):
@@ -50,26 +50,46 @@ async def upload_document(
 
     contents = await file.read()
 
+    # Validate file size
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
             detail="File size exceeds limit of 15 MB."
         )
 
+    # Generate SHA-256 hash
     file_hash = hashlib.sha256(contents).hexdigest()
 
+    # Generate document number
     doc_count = db.query(Document).count()
     doc_num = f"DOC-2026-{1000 + doc_count + 1}"
 
-    safe_filename = f"{doc_num}_{file.filename}"
-    file_path = os.path.join(UPLOADS_DIR, safe_filename)
+    # Use only a safe, controlled file extension
+    original_ext = os.path.splitext(
+        file.filename or ""
+    )[1].lower()
+
+    if original_ext not in [".png", ".jpg", ".jpeg", ".pdf"]:
+        original_ext = ".png"
+
+    # Store file using controlled filename
+    safe_filename = f"{doc_num}{original_ext}"
+    file_path = os.path.join(
+        UPLOADS_DIR,
+        safe_filename
+    )
 
     with open(file_path, "wb") as f:
         f.write(contents)
 
-    proc_filename = f"proc_{safe_filename}"
-    proc_path = os.path.join(PROCESSED_DIR, proc_filename)
+    # Processed file is always stored as PNG
+    proc_filename = f"proc_{doc_num}.png"
+    proc_path = os.path.join(
+        PROCESSED_DIR,
+        proc_filename
+    )
 
+    # Preprocessing
     try:
         preprocess_document_image(
             file_path,
@@ -78,11 +98,13 @@ async def upload_document(
     except Exception:
         proc_path = file_path
 
+    # OCR
     try:
         raw_text, structured, conf = run_ocr_and_extract(
             proc_path
         )
     except Exception as e:
+
         try:
             if os.path.exists(file_path):
                 os.remove(file_path)
@@ -101,6 +123,7 @@ async def upload_document(
             detail=f"Unable to process the uploaded document: {str(e)}"
         )
 
+    # Create document record
     doc = Document(
         document_number=doc_num,
         file_name=file.filename,
@@ -120,6 +143,7 @@ async def upload_document(
     db.add(doc)
     db.flush()
 
+    # Validation
     val_result = run_validation_pipeline(
         db,
         doc.id,
@@ -127,6 +151,7 @@ async def upload_document(
         conf
     )
 
+    # Audit log
     record_audit_log(
         db=db,
         user_id=current_user.id,
@@ -352,3 +377,4 @@ def verify_document_integrity(
             "(SHA-256 hash mismatch detected)"
         )
     }
+
